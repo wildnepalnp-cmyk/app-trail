@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="ne">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TechPana GK - Vehicle Trial Quiz</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Mukta:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+
+    <!-- GenAI SDK Import Map -->
+    <script type="importmap">
+{
+  "imports": {
+    "@google/genai": "https://esm.sh/@google/genai@0.1.1",
+    "react": "https://esm.sh/react@^19.2.3",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "canvas-confetti": "https://esm.sh/canvas-confetti@^1.9.4"
+  }
+}
+</script>
+
+    <style>
+        body {
+            font-family: 'Mukta', sans-serif;
+            background-color: #f8fafc;
+        }
+        
+        /* Custom Animations */
+        @keyframes popIn {
+            0% { transform: scale(0.9); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        
+        @keyframes slideUp {
+            0% { transform: translateY(20px); opacity: 0; }
+            100% { transform: translateY(0); opacity: 1; }
+        }
+
+        @keyframes blob {
+            0% { transform: translate(0px, 0px) scale(1); }
+            33% { transform: translate(30px, -50px) scale(1.1); }
+            66% { transform: translate(-20px, 20px) scale(0.9); }
+            100% { transform: translate(0px, 0px) scale(1); }
+        }
+
+        .animate-pop-in { animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        .animate-slide-up { animation: slideUp 0.5s ease-out forwards; }
+        .animate-blob { animation: blob 7s infinite; }
+        .animation-delay-2000 { animation-delay: 2s; }
+        .animation-delay-4000 { animation-delay: 4s; }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+
+        .option-card {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .option-card:active { transform: scale(0.98); }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- AI Service Module -->
+    <script type="module">
+        import { GoogleGenAI } from "@google/genai";
+
+        // Expose function to global window for React to call
+        window.getAIExplanation = async (questionText, options, correctAnswer) => {
+            // NOTE: In a real app, API Key comes from env. For standalone HTML, we use a placeholder.
+            // Replace 'YOUR_API_KEY_HERE' with your actual key to test AI features.
+            const API_KEY = window.process?.env?.API_KEY || 'YOUR_API_KEY_HERE';
+            
+            if (!API_KEY || API_KEY === 'YOUR_API_KEY_HERE') {
+                return "API Key फेला परेन। कृपया कोडमा API Key राख्नुहोस्। (API Key not found)";
+            }
+
+            try {
+                const ai = new GoogleGenAI({ apiKey: API_KEY });
+                const prompt = `
+                  तपाईं नेपालको सवारी चालक अनुमति पत्र (Driving License) को विज्ञ प्रशिक्षक हुनुहुन्छ।
+                  यो प्रश्नको सही उत्तर किन त्यो भयो, स्पष्ट नेपाली भाषामा बुझाउनुहोस्। छोटो र मिठो (३०-४० शब्दमा) हुनुपर्छ।
+
+                  प्रश्न: ${questionText}
+                  विकल्पहरू:
+                  ${options.map((o, i) => `${i + 1}. ${o}`).join('\n')}
+                  सही उत्तर: ${correctAnswer}
+                `;
+
+                const response = await ai.models.generateContent({
+                    model: 'gemini-2.0-flash-exp', // Using a widely available flash model
+                    contents: prompt,
+                });
+
+                return response.text || "अहिले व्याख्या उपलब्ध छैन।";
+            } catch (error) {
+                console.error("Gemini Error:", error);
+                return "माफ गर्नुहोला, प्राविधिक समस्याका कारण व्याख्या लोड हुन सकेन।";
+            }
+        };
+    </script>
+
+    <!-- Main Application Logic -->
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        // --- Mock Process Env for Compatibility ---
+        window.process = { env: { API_KEY: '' } };
+
+        // --- Icons (Implemented as simple SVG components to avoid UMD issues) ---
+        const Icons = {
+            Car: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><path d="M2 12h12"/></svg>,
+            CheckCircle2: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>,
+            XCircle: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>,
+            BrainCircuit: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M12 4.5a2.5 2.5 0 0 0-4.96-.46 2.5 2.5 0 0 0-1.98 3 2.5 2.5 0 0 0-1.32 4.24 3 3 0 0 0 .34 5.58 2.5 2.5 0 0 0 2.96 3.08 2.5 2.5 0 0 0 4.91.05L12 20V4.5Z"/><path d="M16 8a5 5 0 0 1 5 5"/><path d="M12 13a3 3 0 0 1 3.2-3"/><path d="M20 17.5a2.5 2.5 0 0 0-1.32-4.24 3 3 0 0 0-.34-5.58 2.5 2.5 0 0 0-2.96-3.08V20L12 4.5"/></svg>,
+            ArrowRight: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>,
+            Trophy: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>,
+            RotateCcw: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>,
+            Play: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><polygon points="5 3 19 12 5 21 5 3"/></svg>,
+            Star: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        };
+
+        // --- Data ---
+        const QUESTIONS = [
+          {
+            id: 1,
+            question: "जेब्रा क्रसिङ (Zebra Crossing) के का लागि प्रयोग गरिन्छ?",
+            options: ["गाडी रोक्न", "पैदल यात्रीले बाटो काट्न", "गाडी कुदाउन", "साइकल चलाउन"],
+            correctAnswer: 1,
+            category: "General",
+          },
+          {
+            id: 2,
+            question: "बढी उकालोमा गाडी रोक्दा के गर्नुपर्छ?",
+            options: ["गियर न्यूट्रलमा राख्ने", "ह्यान्ड ब्रेक लगाउने र ओत (Chock) राख्ने", "लाइट बालेर राख्ने", "माथिका सबै"],
+            correctAnswer: 1,
+            isTricky: true,
+          },
+          {
+            id: 3,
+            question: "सवारी साधनको ब्लु बुक (Blue Book) कहाँ नवीकरण गरिन्छ?",
+            options: ["जिल्ला प्रशासन कार्यालय", "यातायात व्यवस्था कार्यालय", "वडा कार्यालय", "ट्राफिक प्रहरी कार्यालय"],
+            correctAnswer: 1,
+            category: "Legal",
+          },
+          {
+            id: 4,
+            question: "तपाईंको सवारी पछाडि एम्बुलेन्स आएमा के गर्नुहुन्छ?",
+            options: ["गाडी रोक्नुपर्छ", "स्पीड बढाउनुपर्छ", "साइड दिएर जान दिने", "उछिन्ने प्रयास गर्ने"],
+            correctAnswer: 2,
+            category: "Safety",
+          },
+          {
+            id: 5,
+            question: "रातो ट्राफिक लाइटले के संकेत गर्छ?",
+            options: ["जानुहोस्", "तयार हुनुहोस्", "रोक्नुहोस्", "बिस्तारै जानुहोस्"],
+            correctAnswer: 2,
+            category: "Signals",
+          },
+          {
+            id: 6,
+            question: "मोटरसाइकल चलाउँदा टाउको बचाउन के लगाउनुपर्छ?",
+            options: ["टोपी", "हेल्मेट", "गम्छा", "चस्मा"],
+            correctAnswer: 1,
+            category: "Safety",
+          },
+          {
+            id: 7,
+            question: "लेन अनुशासन भनेको के हो?",
+            options: ["आफ्नो लेनमा मात्र सवारी चलाउनु", "जथाभावी ओभरटेक गर्नु", "रातो बत्तीमा पनि जानु", "माथिका सबै"],
+            correctAnswer: 0,
+            category: "Rules",
+          },
+          {
+            id: 8,
+            question: "गाडीको साइड लाइट कति बेला बाल्नुपर्छ?",
+            options: ["मोड्दा वा साइड बदल्दा", "सिधा जाँदा", "रोक्दा मात्र", "हर्न बजाउँदा"],
+            correctAnswer: 0,
+            category: "Signals",
+          },
+          {
+            id: 9,
+            question: "कुन अवस्थामा हर्न बजाउन निषेध गरिएको छ?",
+            options: ["अस्पताल र विद्यालय क्षेत्रमा", "बजारमा", "चोकमा", "हइवेमा"],
+            correctAnswer: 0,
+            isTricky: true,
+          },
+          {
+            id: 10,
+            question: "मादक पदार्थ सेवन (Mapase) गरी सवारी चलाएमा के हुन्छ?",
+            options: ["पुरस्कार पाइन्छ", "जरिवाना र लाइसेन्स खारेज हुन सक्छ", "केही हुँदैन", "सम्मान गरिन्छ"],
+            correctAnswer: 1,
+            category: "Legal",
+          },
+           {
+            id: 11,
+            question: "सवारी चालक अनुमति पत्र (License) कति अवधिको लागि मान्य हुन्छ?",
+            options: ["१ वर्ष", "५ वर्ष", "१० वर्ष", "२ वर्ष"],
+            correctAnswer: 1,
+            category: "Legal",
+          },
+          {
+            id: 12,
+            question: "तेस्रो पक्ष बीमा (Third Party Insurance) भनेको के हो?",
+            options: ["आफ्नो गाडीको बीमा", "चालकको बीमा", "सवारीबाट पीडित हुने अन्य व्यक्तिको बीमा", "यात्रुको मात्र बीमा"],
+            correctAnswer: 2,
+            isTricky: true,
+          },
+          {
+            id: 13,
+            question: "भि.आइ.पी. (VIP) सवारी चलेको बेला के गर्नुपर्छ?",
+            options: ["आफ्नो सवारी रोकेर साइड दिने", "सँगै कुदाउने", "हर्न बजाउने", "ओभरटेक गर्ने"],
+            correctAnswer: 0,
+            category: "Rules",
+          },
+          {
+            id: 14,
+            question: "इन्जिन तातेको बेला रेडियटरको बिर्को खोल्दा के हुन्छ?",
+            options: ["तातो पानीले पोल्न सक्छ", "इन्जिन बिग्रन्छ", "केही हुँदैन", "चिसो हुन्छ"],
+            correctAnswer: 0,
+            category: "Technical",
+          },
+          {
+            id: 15,
+            question: "साइनबोर्डमा 'गोलो घुम्ती' (Roundabout) देखिएमा के गर्नुपर्छ?",
+            options: ["दायाँबाट आउनेलाई प्राथमिकता दिने", "बायाँबाट आउनेलाई प्राथमिकता दिने", "सिधै जाने", "रोकेर बस्ने"],
+            correctAnswer: 0,
+            isTricky: true,
+          },
+          {
+            id: 16,
+            question: "कुन गियरमा गाडीको शक्ति (Power) सबैभन्दा बढी हुन्छ?",
+            options: ["पहिलो गियर", "दोस्रो गियर", "तेस्रो गियर", "चौथो गियर"],
+            correctAnswer: 0,
+            category: "Technical",
+          },
+          {
+            id: 17,
+            question: "ओरालोमा गाडी चलाउँदा इन्धन बचाउन के गर्नुपर्छ?",
+            options: ["इन्जिन बन्द गर्ने", "न्यूट्रलमा गुडाउने", "तल्लो गियरमा चलाउने", "क्लच थिचेर गुडाउने"],
+            correctAnswer: 2,
+            isTricky: true,
+          },
+          {
+            id: 18,
+            question: "लुकिङ ग्लास (Looking Glass) को प्रयोग कतिखेर गरिन्छ?",
+            options: ["दाँत हेर्न", "पछाडिको सवारी हेर्न", "अनुहार हेर्न", "सिधै हेर्न"],
+            correctAnswer: 1,
+            category: "Safety",
+          },
+          {
+            id: 19,
+            question: "सवारी साधनको प्रदुषण जाँच पास स्टिकर कुन रंगको हुन्छ?",
+            options: ["रातो", "हरियो", "पहेँलो", "नीलो"],
+            correctAnswer: 1,
+            category: "Legal",
+          },
+          {
+            id: 20,
+            question: "कस्तो अवस्थामा ओभरटेक गर्नु हुँदैन?",
+            options: ["साँघुरो पुलमा", "घुम्तीमा", "अगाडिको गाडीले ओभरटेक गर्दै गर्दा", "माथिका सबै"],
+            correctAnswer: 3,
+            isTricky: true,
+          },
+          // ... (Includes sample of data, repeating for 200 demo)
+        ];
+        
+        // Generate 200 items for the demo by repeating/shuffling
+        const FULL_QUESTION_SET = [
+            ...QUESTIONS,
+            ...QUESTIONS.map(q => ({...q, id: q.id + 50})),
+            ...QUESTIONS.map(q => ({...q, id: q.id + 100})),
+            ...QUESTIONS.map(q => ({...q, id: q.id + 150})),
+            ...QUESTIONS.map(q => ({...q, id: q.id + 200})),
+            ...QUESTIONS.map(q => ({...q, id: q.id + 250})),
+            ...QUESTIONS.map(q => ({...q, id: q.id + 300})),
+            ...QUESTIONS.map(q => ({...q, id: q.id + 350})),
+            ...QUESTIONS.map(q => ({...q, id: q.id + 400})),
+            ...QUESTIONS.map(q => ({...q, id: q.id + 450})),
+        ].slice(0, 200).sort(() => Math.random() - 0.5);
+
+        // --- Component: Button ---
+        const Button = ({ children, variant = 'primary', size = 'md', fullWidth = false, className = '', ...props }) => {
+            const baseStyle = "relative font-semibold rounded-2xl transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 overflow-hidden";
+            
+            const variants = {
+                primary: "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg shadow-blue-500/30 border border-transparent",
+                secondary: "bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-lg shadow-orange-500/30 border border-transparent",
+                outline: "bg-white border-2 border-blue-100 text-blue-600 hover:border-blue-500 hover:bg-blue-50",
+                danger: "bg-gradient-to-r from-red-500 to-rose-500 hover:from-red-600 hover:to-rose-600 text-white shadow-lg shadow-red-500/30",
+                ghost: "bg-transparent hover:bg-gray-100 text-gray-600"
+            };
+
+            const sizes = {
+                sm: "px-4 py-2 text-sm",
+                md: "px-6 py-3.5 text-base",
+                lg: "px-8 py-4 text-lg"
+            };
+
+            return (
+                <button className={`${baseStyle} ${variants[variant]} ${sizes[size]} ${fullWidth ? 'w-full' : ''} ${className}`} {...props}>
+                    {children}
+                </button>
+            );
+        };
+
+        // --- Component: QuizCard ---
+        const QuizCard = ({ question, questionNumber, totalQuestions, onAnswer, onNext }) => {
+            const [selectedOption, setSelectedOption] = useState(null);
+            const [showExplanation, setShowExplanation] = useState(false);
+            const [explanationText, setExplanationText] = useState('');
+            const [loadingExplanation, setLoadingExplanation] = useState(false);
+
+            useEffect(() => {
+                setSelectedOption(null);
+                setShowExplanation(false);
+                setExplanationText('');
+                setLoadingExplanation(false);
+            }, [question.id]);
+
+            const handleOptionClick = (index) => {
+                if (selectedOption !== null) return;
+                
+                setSelectedOption(index);
+                const isCorrect = index === question.correctAnswer;
+                
+                if (isCorrect) {
+                    window.confetti({
+                        particleCount: 100,
+                        spread: 70,
+                        origin: { y: 0.7 },
+                        colors: ['#22c55e', '#3b82f6', '#f59e0b']
+                    });
+                }
+                onAnswer(index, isCorrect);
+            };
+
+            const handleExplain = async () => {
+                if (explanationText) {
+                    setShowExplanation(!showExplanation);
+                    return;
+                }
+                
+                setLoadingExplanation(true);
+                setShowExplanation(true);
+                
+                // Call global AI function defined in module script
+                const text = window.getAIExplanation 
+                    ? await window.getAIExplanation(question.question, question.options, question.options[question.correctAnswer])
+                    : "AI service not available.";
+                
+                setExplanationText(text);
+                setLoadingExplanation(false);
+            };
+
+            const getOptionStyle = (index) => {
+                const base = "option-card relative p-5 rounded-2xl border-2 text-left flex items-center justify-between group cursor-pointer shadow-sm hover:shadow-md";
+                if (selectedOption === null) {
+                    return `${base} border-gray-200 hover:border-blue-400 hover:bg-blue-50/50 bg-white text-gray-700`;
+                }
+                if (index === question.correctAnswer) {
+                    return `${base} border-green-500 bg-green-50 text-green-800 shadow-green-100 ring-2 ring-green-500/20`;
+                }
+                if (selectedOption === index && index !== question.correctAnswer) {
+                    return `${base} border-red-500 bg-red-50 text-red-800`;
+                }
+                return `${base} border-gray-100 bg-gray-50 opacity-50 grayscale`;
+            };
+
+            return (
+                <div className="w-full max-w-2xl mx-auto animate-pop-in">
+                    <div className="flex justify-between items-center mb-6">
+                        <span className="text-sm font-bold text-gray-400 tracking-wider uppercase">
+                            Question {questionNumber} <span className="text-gray-300">/</span> {totalQuestions}
+                        </span>
+                        <span className={`px-3 py-1 rounded-full text-xs font-bold tracking-wide uppercase ${question.isTricky ? 'bg-yellow-100 text-yellow-700' : 'bg-blue-100 text-blue-700'}`}>
+                            {question.isTricky ? 'Tricky' : (question.category || 'General')}
+                        </span>
+                    </div>
+
+                    <div className="bg-white rounded-3xl shadow-xl shadow-blue-900/5 p-6 md:p-10 mb-8 border border-white relative overflow-hidden">
+                        <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-blue-50 rounded-full blur-2xl opacity-50"></div>
+                        <div className="absolute bottom-0 left-0 -mb-4 -ml-4 w-20 h-20 bg-indigo-50 rounded-full blur-xl opacity-50"></div>
+                        <h2 className="relative text-2xl md:text-3xl font-bold text-gray-800 leading-snug">
+                            {question.question}
+                        </h2>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4 mb-8">
+                        {question.options.map((option, index) => (
+                            <button key={index} onClick={() => handleOptionClick(index)} disabled={selectedOption !== null} className={getOptionStyle(index)}>
+                                <div className="flex items-center gap-4">
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${selectedOption === null ? 'bg-gray-100 text-gray-500 group-hover:bg-blue-200 group-hover:text-blue-700' : (index === question.correctAnswer ? 'bg-green-200 text-green-700' : (selectedOption === index ? 'bg-red-200 text-red-700' : 'bg-gray-200'))}`}>
+                                        {['क', 'ख', 'ग', 'घ'][index]}
+                                    </div>
+                                    <span className="font-medium text-lg">{option}</span>
+                                </div>
+                                {selectedOption !== null && index === question.correctAnswer && (
+                                    <div className="bg-green-100 p-1 rounded-full animate-bounce"><Icons.CheckCircle2 className="w-6 h-6 text-green-600" /></div>
+                                )}
+                                {selectedOption === index && index !== question.correctAnswer && (
+                                    <Icons.XCircle className="w-6 h-6 text-red-600" />
+                                )}
+                            </button>
+                        ))}
+                    </div>
+
+                    {selectedOption !== null && (
+                        <div className="animate-slide-up bg-white p-4 md:p-6 rounded-2xl shadow-lg border border-gray-100">
+                            <div className={`mb-4 flex items-center gap-3 text-lg font-bold ${selectedOption === question.correctAnswer ? 'text-green-600' : 'text-red-500'}`}>
+                                {selectedOption === question.correctAnswer ? <>🎉 एकदम सही जवाफ! (Correct)</> : <>❌ मिलेन! सही उत्तर "{question.options[question.correctAnswer]}" हो।</>}
+                            </div>
+                            <div className="flex flex-col sm:flex-row gap-3">
+                                <Button onClick={handleExplain} variant="outline" className="flex-1" disabled={loadingExplanation}>
+                                    <Icons.BrainCircuit className="w-5 h-5" />
+                                    {loadingExplanation ? 'सोच्दै छु...' : 'किन? (AI व्याख्या)'}
+                                </Button>
+                                <Button onClick={onNext} variant="primary" className="flex-1 group">
+                                    अर्को प्रश्न <Icons.ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                                </Button>
+                            </div>
+                            {showExplanation && (
+                                <div className="mt-4 bg-gradient-to-br from-blue-50 to-indigo-50 p-5 rounded-xl border border-blue-100 text-gray-800 animate-slide-up">
+                                    <h4 className="font-bold mb-2 flex items-center gap-2 text-blue-700 text-sm uppercase tracking-wide">
+                                        <Icons.BrainCircuit className="w-4 h-4"/> AI स्पष्टीकरण (Explanation)
+                                    </h4>
+                                    <p className="leading-relaxed text-lg text-gray-700">{explanationText}</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // --- Component: App ---
+        const App = () => {
+            const [appState, setAppState] = useState('HOME');
+            const [quizState, setQuizState] = useState({
+                currentQuestionIndex: 0,
+                score: 0,
+                answers: [],
+                timeLeft: 0,
+            });
+
+            const questions = useMemo(() => FULL_QUESTION_SET, []);
+
+            const handleStart = () => {
+                setAppState('QUIZ');
+                setQuizState({ currentQuestionIndex: 0, score: 0, answers: [], timeLeft: 0 });
+            };
+
+            const handleAnswer = (optionIndex, isCorrect) => {
+                const newAnswers = [...quizState.answers];
+                newAnswers[quizState.currentQuestionIndex] = {
+                    questionId: questions[quizState.currentQuestionIndex].id,
+                    selectedOption: optionIndex,
+                    isCorrect
+                };
+                setQuizState({
+                    ...quizState,
+                    score: isCorrect ? quizState.score + 1 : quizState.score,
+                    answers: newAnswers
+                });
+            };
+
+            const handleNext = () => {
+                if (quizState.currentQuestionIndex + 1 < questions.length) {
+                    setQuizState({ ...quizState, currentQuestionIndex: quizState.currentQuestionIndex + 1 });
+                    window.scrollTo(0, 0);
+                } else {
+                    setAppState('RESULT');
+                    fireFireworks();
+                }
+            };
+
+            const fireFireworks = () => {
+                const duration = 3000;
+                const animationEnd = Date.now() + duration;
+                const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
+                const random = (min, max) => Math.random() * (max - min) + min;
+                const interval = setInterval(function() {
+                    const timeLeft = animationEnd - Date.now();
+                    if (timeLeft <= 0) return clearInterval(interval);
+                    const particleCount = 50 * (timeLeft / duration);
+                    window.confetti({ ...defaults, particleCount, origin: { x: random(0.1, 0.3), y: Math.random() - 0.2 } });
+                    window.confetti({ ...defaults, particleCount, origin: { x: random(0.7, 0.9), y: Math.random() - 0.2 } });
+                }, 250);
+            };
+
+            const renderHome = () => (
+                <div className="min-h-screen bg-slate-50 relative overflow-hidden flex items-center justify-center p-4">
+                    <div className="absolute top-0 left-0 w-96 h-96 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob"></div>
+                    <div className="absolute top-0 right-0 w-96 h-96 bg-purple-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000"></div>
+                    <div className="glass-card rounded-[2.5rem] shadow-2xl p-8 md:p-12 max-w-lg w-full text-center relative z-10 border border-white/50">
+                        <div className="mb-8 flex justify-center">
+                            <div className="bg-gradient-to-tr from-blue-600 to-indigo-600 p-5 rounded-3xl shadow-lg shadow-blue-500/30 transform -rotate-6 hover:rotate-0 transition-transform duration-300">
+                                <Icons.Car className="w-14 h-14 text-white" />
+                            </div>
+                        </div>
+                        <h1 className="text-4xl md:text-6xl font-extrabold text-slate-800 mb-2 tracking-tight">
+                            TechPana <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">GK</span>
+                        </h1>
+                        <p className="text-slate-500 text-lg mb-8 font-medium">सवारी चालक अनुमति पत्र (License) लिखित परीक्षा तयारी</p>
+                        <Button onClick={handleStart} size="lg" fullWidth className="group relative overflow-hidden !rounded-2xl">
+                            <span className="relative z-10 flex items-center justify-center gap-2 font-bold text-lg">
+                                परीक्षा सुरु गर्नुहोस् <Icons.Play className="w-6 h-6 fill-current" />
+                            </span>
+                        </Button>
+                    </div>
+                </div>
+            );
+
+            const renderQuiz = () => (
+                <div className="min-h-screen bg-slate-50 flex flex-col font-nepali">
+                    <header className="bg-white/80 backdrop-blur-md shadow-sm sticky top-0 z-20 border-b border-gray-100">
+                        <div className="max-w-3xl mx-auto px-4 py-3 flex justify-between items-center">
+                            <div className="flex items-center gap-2">
+                                <div className="bg-blue-600 p-1.5 rounded-lg"><Icons.Car className="w-4 h-4 text-white" /></div>
+                                <span className="font-bold text-gray-800">TechPana GK</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <div className="hidden sm:flex items-center gap-1 text-xs font-semibold text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+                                    <Icons.Trophy className="w-3 h-3 text-amber-500" /> Score: {quizState.score}
+                                </div>
+                                <button onClick={() => setAppState('HOME')} className="text-gray-400 hover:text-red-500 transition-colors"><Icons.RotateCcw className="w-5 h-5" /></button>
+                            </div>
+                        </div>
+                        <div className="h-1.5 w-full bg-gray-100">
+                            <div className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-500 ease-out shadow-[0_0_10px_rgba(59,130,246,0.5)]" style={{ width: `${((quizState.currentQuestionIndex + 1) / questions.length) * 100}%` }}></div>
+                        </div>
+                    </header>
+                    <main className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto">
+                        <QuizCard question={questions[quizState.currentQuestionIndex]} questionNumber={quizState.currentQuestionIndex + 1} totalQuestions={questions.length} onAnswer={handleAnswer} onNext={handleNext} />
+                    </main>
+                </div>
+            );
+
+            const renderResult = () => {
+                const percentage = Math.round((quizState.score / questions.length) * 100);
+                const isPass = percentage >= 50;
+                return (
+                    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+                        <div className="bg-white rounded-[2.5rem] shadow-2xl p-8 md:p-12 max-w-md w-full text-center relative overflow-hidden">
+                            {isPass && <div className="absolute inset-0 bg-gradient-to-b from-transparent to-green-50/50 pointer-events-none"></div>}
+                            <div className="relative mb-8">
+                                <div className={`w-32 h-32 mx-auto rounded-full flex items-center justify-center shadow-lg border-4 border-white ${isPass ? 'bg-gradient-to-tr from-green-400 to-emerald-600' : 'bg-gradient-to-tr from-red-400 to-rose-600'}`}>
+                                    {isPass ? <Icons.Trophy className="w-16 h-16 text-white drop-shadow-md" /> : <Icons.RotateCcw className="w-16 h-16 text-white drop-shadow-md" />}
+                                </div>
+                            </div>
+                            <h2 className="text-3xl md:text-4xl font-extrabold text-gray-800 mb-2">{isPass ? 'बधाई छ! 🎉' : 'प्रयास जारी राख्नुहोस्!'}</h2>
+                            <p className="text-gray-500 font-medium mb-8">{isPass ? 'तपाईं लिखित परीक्षामा उत्तीर्ण हुन योग्य हुनुहुन्छ।' : 'तपाईंले अझै अभ्यास गर्नुपर्ने देखिन्छ।'}</p>
+                            <div className="grid grid-cols-2 gap-4 mb-8">
+                                <div className="bg-gray-50 p-5 rounded-2xl border border-gray-100 flex flex-col items-center"><span className="text-xs uppercase font-bold text-gray-400 mb-1">Score</span><span className={`text-3xl font-black ${isPass ? 'text-green-600' : 'text-red-500'}`}>{quizState.score}</span></div>
+                                <div className="bg-gray-50 p-5 rounded-2xl border border-gray-100 flex flex-col items-center"><span className="text-xs uppercase font-bold text-gray-400 mb-1">Result</span><span className="text-3xl font-black text-gray-800">{percentage}%</span></div>
+                            </div>
+                            <Button onClick={handleStart} variant="primary" size="lg" fullWidth className="!rounded-2xl shadow-blue-200">फेरि खेल्नुहोस्</Button>
+                            <Button onClick={() => setAppState('HOME')} variant="ghost" fullWidth className="mt-2 !rounded-2xl">गृहपृष्ठ</Button>
+                        </div>
+                    </div>
+                );
+            };
+
+            return (
+                <div className="font-nepali text-gray-800 antialiased selection:bg-blue-100 selection:text-blue-900">
+                    {appState === 'HOME' && renderHome()}
+                    {appState === 'QUIZ' && renderQuiz()}
+                    {appState === 'RESULT' && renderResult()}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
